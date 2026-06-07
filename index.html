@@ -3,7 +3,15 @@
 <html lang="zh-TW"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>幻想冒險 Plus - 自訂音樂版</title>
+    <meta name="description" content="Final Fantasy">
+    <meta property="og:title" content="Final Fantasy">
+    <meta property="og:description" content="Final Fantasy">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://huiyaooo.github.io/fantasy-adventure/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Final Fantasy">
+    <meta name="twitter:description" content="Final Fantasy">
+    <title>Final Fantasy</title>
     <style>
         :root {
             /* 原本的變數 */
@@ -666,7 +674,7 @@ pointer-events: none;
     <button id="btn-sfx-toggle" type="button" onclick="AudioManager.toggleSfx()">🔊 音效</button>
     <input id="bgm-volume" type="range" min="0" max="100" value="35" oninput="AudioManager.setVolume(this.value)">
 </div>
-<div id="sound-tip" class="sound-tip">背景音樂已換成你提供的 MP3。若沒聲音，請先確認 bgm.mp3 跟 HTML 放在同一個資料夾。</div>
+<div id="sound-tip" class="sound-tip" style="display:none;"></div>
 
 
 <div id="auth-overlay" class="auth-overlay">
