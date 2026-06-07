@@ -3666,6 +3666,16 @@ combatRound() {
         if (GameState.phase !== "combat") return;
         GameState.combatTurn++; 
         const enemy = GameState.currentEnemy;
+        // [FIX] 防止怪物已死亡但按鈕仍停在「戰鬥」造成卡關
+        if (!enemy) {
+            GameState.phase = "event_end";
+            this.setButtons("繼續", "nextEvent", "無", null, true);
+            return;
+        }
+        if (enemy.hp <= 0) {
+            this.combatWin();
+            return;
+        }
         let logHtml = "";
 
         // 檢查最後的鼓舞
@@ -4012,6 +4022,12 @@ if (Player.ghostTurns > 0) {
     },
 
     enemyAttackPhase(enemy, logHtml) {
+        // [FIX] 如果玩家攻擊已經把怪物打死，就不要再讓怪物反擊或停在戰鬥畫面
+        if (!enemy) return;
+        if (enemy.hp <= 0) {
+            this.combatWin();
+            return;
+        }
         const ignoreGodPower = Player.lastInspirationTurns > 0;
 
         // 神：重生破壞
@@ -4595,6 +4611,11 @@ openSystemModal() {
 
     combatWin() {
         const enemy = GameState.currentEnemy;
+        if (!enemy) {
+            GameState.phase = "event_end";
+            this.setButtons("繼續", "nextEvent", "無", null, true);
+            return;
+        }
 Player.isConfused = false;
         let isGodKill = enemy.isGod;
         let isOldOneKill = enemy.isOldOne; // [NEW] 舊日支配者擊殺判定
@@ -4611,7 +4632,12 @@ if (enemy.isGardenBoss) {
                 "✨");
             
             this.showFloatingText("獲得 原初之劍", "#00ffcc");
+            // [FIX] 戰鬥勝利後清空敵人狀態，避免存檔/雲端同步後還原成戰鬥畫面
+            GameState.currentEnemy = null;
+            GameState.combatTurn = 0;
+            GameState.enemyDominated = false;
             this.setButtons("繼續", "nextEvent", "無", null, true);
+            this.updateUI();
             return; // 直接結束，不執行後續一般掉落
         }
 
@@ -4765,7 +4791,12 @@ if (isGodKill) {
             
             this.showFloatingText("獲得 輪迴沙漏", "#00ffcc");
             this.checkAchievements(); // 檢查弒神者成就
+            // [FIX] 戰鬥勝利後清空敵人狀態，避免存檔/雲端同步後還原成戰鬥畫面
+            GameState.currentEnemy = null;
+            GameState.combatTurn = 0;
+            GameState.enemyDominated = false;
             this.setButtons("繼續無盡冒險", "nextEvent", "無", null, true);
+            this.updateUI();
             return; // 直接結束，不執行一般掉落
         }
         
@@ -4850,6 +4881,10 @@ else {
         this.renderEvent(winTitle, "你擊敗了敵人！", dropText || "沒有掉落任何物品。", "🎉");
         document.getElementById('event-icon').className = "monster-icon"; 
         this.checkAchievements();
+            // [FIX] 戰鬥勝利後清空敵人狀態，避免存檔/雲端同步後還原成戰鬥畫面
+            GameState.currentEnemy = null;
+            GameState.combatTurn = 0;
+            GameState.enemyDominated = false;
         this.setButtons("繼續", "nextEvent", "無", null, true);
         this.updateUI();
     },
