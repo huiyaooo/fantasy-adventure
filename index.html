@@ -884,7 +884,7 @@ pointer-events: none;
         <button onclick="Auth.resetAccountScores()" style="background:#5d4037;">重置成績</button>
     </div>
 </div>
-<div class="section-title">☁️ 雲端狀態：Firebase Realtime Database 已啟用</div>
+<div class="section-title" style="display:none;">☁️ 雲端狀態：Firebase Realtime Database 已啟用</div>
 <div class="section-title">📊 玩家成績</div>
 <div id="records-panel" class="records-panel">
     <div class="record-card">
@@ -1051,9 +1051,9 @@ const AudioManager = {
                 this.bgmEl.volume = this.volume / 100;
                 await this.bgmEl.play();
                 this.musicOn = true;
-                this.showTip('正在播放你提供的背景音樂。');
+                this.showTip('背景音樂播放中。');
             } catch (err) {
-                this.showTip('瀏覽器擋住播放，請再按一次「開音樂」，或確認 bgm.mp3 檔案存在。');
+                this.showTip('瀏覽器擋住播放，請再按一次「開音樂」。');
                 console.warn('BGM play failed:', err);
             }
         } else {
@@ -6627,6 +6627,85 @@ getEnemySkillDesc(name) {
 };
 
 window.addEventListener('beforeunload', () => { try { if (getCurrentUsername() && Player.class) { updateAccountStatsFromPlayer(); Game.saveGame(); } } catch (e) {} });
+
+
+// ===== Final safety patch: class selection / next layer freeze fix =====
+(function () {
+    if (typeof Game === 'undefined') return;
+
+    const badgeMapFinal = {
+        knight: '🛡️ 騎士', merchant: '💰 商販', thief: '🗡️ 盜賊',
+        cultist: '😈 惡魔信徒', scarecrow: '🌾 稻草人', ape: '🦍 人猿',
+        challenger: '🧗 挑戰者', dragonslayer: '🐉 屠龍者'
+    };
+
+    const forceReadyState = function (classType) {
+        if (classType) Player.class = classType;
+        if (!Player.sinState) Player.sinState = { slothCount: 0, wrathRevive: 0, lustActive: false, greedActive: false };
+        if (!Player.equipment) Player.equipment = { weapon: null, armor: null, shield: null, accessories: [null, null, null] };
+        if (!Player.equipment.accessories) Player.equipment.accessories = [null, null, null];
+        if (!Player.inventory) Player.inventory = { equipment: [], consumable: [], material: [], accessory: [] };
+        if (!Player.inventory.equipment) Player.inventory.equipment = [];
+        if (!Player.inventory.consumable) Player.inventory.consumable = [];
+        if (!Player.inventory.material) Player.inventory.material = [];
+        if (!Player.inventory.accessory) Player.inventory.accessory = [];
+
+        GameState.phase = 'event_end';
+        GameState.currentEnemy = null;
+        GameState.combatTurn = 0;
+        GameState.enemyDominated = false;
+        const modal = document.getElementById('class-modal');
+        if (modal) modal.style.display = 'none';
+        const badge = document.getElementById('class-badge');
+        if (badge) badge.innerText = badgeMapFinal[Player.class] || '';
+        if (Game.renderEvent) Game.renderEvent('準備就緒', '你的冒險即將開始。', '按下「開始冒險」進入下一層。', '✨');
+        if (Game.setButtons) Game.setButtons('開始冒險', 'nextEvent', '無', null, true);
+        const btn = document.getElementById('btn-main');
+        if (btn) {
+            btn.disabled = false;
+            btn.onclick = function (ev) {
+                if (ev) ev.preventDefault();
+                Game.nextEvent();
+            };
+        }
+        try { Game.updateUI(); } catch (e) { console.warn('updateUI fallback failed', e); }
+        try { Game.saveGame(); } catch (e) { console.warn('saveGame fallback failed', e); }
+    };
+
+    const originalSelectClass = Game.selectClass ? Game.selectClass.bind(Game) : null;
+    Game.selectClass = function (classType) {
+        try {
+            if (originalSelectClass) originalSelectClass(classType);
+        } catch (e) {
+            console.error('selectClass error recovered:', e);
+        }
+        forceReadyState(classType);
+    };
+
+    const originalNextEvent = Game.nextEvent ? Game.nextEvent.bind(Game) : null;
+    Game.nextEvent = function () {
+        if (!Player.class) {
+            const modal = document.getElementById('class-modal');
+            if (modal) modal.style.display = 'flex';
+            if (Game.renderEvent) Game.renderEvent('準備冒險', '請先選擇職業。', '選完職業後即可開始冒險。', '🎲');
+            return;
+        }
+        if (!Player.sinState) Player.sinState = { slothCount: 0, wrathRevive: 0, lustActive: false, greedActive: false };
+        if (GameState.phase === 'select_class') GameState.phase = 'event_end';
+        try {
+            return originalNextEvent ? originalNextEvent() : null;
+        } catch (e) {
+            console.error('nextEvent error recovered:', e);
+            GameState.phase = 'event_end';
+            GameState.currentEnemy = null;
+            GameState.combatTurn = 0;
+            if (Game.renderEvent) Game.renderEvent('繼續冒險', '系統已修復暫停狀態。', '請再按一次「繼續」。', '✨');
+            if (Game.setButtons) Game.setButtons('繼續', 'nextEvent', '無', null, true);
+            try { Game.updateUI(); Game.saveGame(); } catch (err) {}
+        }
+    };
+})();
+
 Game.init();
 </script>
 
