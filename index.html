@@ -688,7 +688,7 @@ pointer-events: none;
             <button class="btn-primary" onclick="Auth.register()">建立帳號</button>
         </div>
         <div id="auth-msg" class="auth-msg"></div>
-        <div class="auth-tip">提示：若設定 Firebase，帳號與進度可同步到雲端；未設定時會先保存在這台瀏覽器。</div>
+        <div class="auth-tip">提示：此版本已連接 Firebase，註冊/登入/存檔會同步到雲端。</div>
     </div>
 </div>
 
@@ -899,6 +899,15 @@ pointer-events: none;
         <div class="record-value" id="record-run-count">0 場</div>
         <div class="record-sub" id="record-death-count">死亡 0 次</div>
     </div>
+</div>
+
+<div class="section-title">☁️ Firebase 雲端同步狀態</div>
+<div id="cloud-status-panel" style="background:#17212f;border:1px solid rgba(76,175,80,0.35);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+    <div>
+        <div id="cloud-status-text" style="font-weight:bold;color:#81c784;">已設定 Firebase，等待測試寫入...</div>
+        <div style="font-size:0.82em;color:#a8b3c7;margin-top:4px;">資料庫：game-4bc42-default-rtdb / 路徑：accounts、saves、cloudTest</div>
+    </div>
+    <button onclick="CloudDB.testWrite()" style="background:#2e7d32;color:white;padding:8px 12px;">測試寫入 Firebase</button>
 </div>
 
 
@@ -1534,11 +1543,17 @@ function isCloudEnabled() {
 function safeCloudName(name) {
     return encodeURIComponent(String(name || '').trim()).replace(/\./g, '%2E');
 }
+function updateCloudStatus(message, ok = true) {
+    const el = document.getElementById('cloud-status-text');
+    if (el) {
+        el.textContent = message;
+        el.style.color = ok ? '#81c784' : '#ff8a80';
+    }
+}
 async function cloudFetch(path, options = {}) {
     if (!isCloudEnabled()) return null;
     const cleanBase = CLOUD_CONFIG.databaseURL.replace(/\/$/, '');
-    const auth = CLOUD_CONFIG.apiKey ? `?key=${encodeURIComponent(CLOUD_CONFIG.apiKey)}` : '';
-    const res = await fetch(`${cleanBase}/${path}.json${auth}`, {
+    const res = await fetch(`${cleanBase}/${path}.json`, {
         headers: { 'Content-Type': 'application/json' },
         ...options
     });
@@ -1561,6 +1576,26 @@ const CloudDB = {
     async deleteSave(username) {
         return await cloudFetch(`saves/${safeCloudName(username)}`, { method: 'DELETE' });
     },
+    async testWrite() {
+        try {
+            const username = getCurrentUsername() || 'guest';
+            await cloudFetch(`cloudTest/${safeCloudName(username)}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    status: 'ok',
+                    username,
+                    message: 'GitHub Pages 已成功寫入 Firebase Realtime Database',
+                    time: new Date().toLocaleString()
+                })
+            });
+            updateCloudStatus('Firebase 測試寫入成功！請回 Firebase Data 查看 cloudTest。', true);
+            alert('Firebase 測試寫入成功！回 Realtime Database 的 Data 會看到 cloudTest。');
+        } catch (e) {
+            console.error(e);
+            updateCloudStatus('Firebase 寫入失敗：請檢查 Rules 是否允許 read/write。', false);
+            alert('Firebase 寫入失敗。請到 Realtime Database → 規則，確認 .read 和 .write 是 true。');
+        }
+    },
     async cacheCloudAccount(username) {
         if (!isCloudEnabled() || !username) return;
         const account = await this.getAccount(username);
@@ -1582,6 +1617,7 @@ const CloudDB = {
         if (rawSave) {
             try { await this.setSave(username, JSON.parse(rawSave)); } catch (e) {}
         }
+        updateCloudStatus(`已同步到 Firebase：${username}，${new Date().toLocaleTimeString()}`, true);
     }
 };
 
@@ -1762,7 +1798,7 @@ const Auth = {
         try { if (isCloudEnabled() && await CloudDB.getAccount(username)) return this.setMessage('這個帳號已經有人用了。', true); } catch(e) { console.warn(e); }
         if (accounts[username]) return this.setMessage('這個帳號已經有人用了。', true);
         ensureAccount(username, password);
-        try { if (isCloudEnabled()) await CloudDB.setAccount(username, getAccounts()[username]); } catch(e) { console.warn(e); }
+        try { if (isCloudEnabled()) { await CloudDB.setAccount(username, getAccounts()[username]); updateCloudStatus(`註冊資料已寫入 Firebase：${username}`, true); } } catch(e) { console.warn(e); updateCloudStatus('Firebase 註冊寫入失敗，請檢查 Rules。', false); return this.setMessage('Firebase 雲端寫入失敗，請檢查資料庫規則。', true); }
         localStorage.setItem(CURRENT_USER_KEY, username);
         this.setMessage('註冊成功，已自動登入。');
         this.finishLogin();
@@ -1781,7 +1817,7 @@ const Auth = {
                     accounts = getAccounts();
                 }
             }
-        } catch(e) { console.warn(e); }
+        } catch(e) { console.warn(e); updateCloudStatus('Firebase 登入讀取失敗，請檢查 Rules。', false); }
         if (!accounts[username] || accounts[username].password !== password) {
             return this.setMessage('帳號或密碼錯誤。', true);
         }
@@ -1905,6 +1941,7 @@ merchantRefreshed: false,
 const Game = {
     init() {
         Auth.init();
+        updateCloudStatus('已設定 Firebase，可按右側按鈕測試寫入。', true);
         if (!getCurrentUsername()) return;
         if (localStorage.getItem(getSaveKey())) {
             this.loadGame();
