@@ -6706,6 +6706,141 @@ window.addEventListener('beforeunload', () => { try { if (getCurrentUsername() &
     };
 })();
 
+
+// ===== Emergency final patch: force Start Adventure button to enter next floor =====
+(function () {
+    if (typeof Game === 'undefined') return;
+
+    function ensurePlayableStructures() {
+        if (!Player.equipment) Player.equipment = { weapon: null, armor: null, shield: null, accessories: [null, null, null] };
+        if (!Player.equipment.accessories) Player.equipment.accessories = [null, null, null];
+        if (!Player.inventory) Player.inventory = { equipment: [], consumable: [], material: [], accessory: [] };
+        if (!Player.inventory.equipment) Player.inventory.equipment = [];
+        if (!Player.inventory.consumable) Player.inventory.consumable = [];
+        if (!Player.inventory.material) Player.inventory.material = [];
+        if (!Player.inventory.accessory) Player.inventory.accessory = [];
+        if (!Player.sinState) Player.sinState = { slothCount: 0, wrathRevive: 0, lustActive: false, greedActive: false };
+        if (typeof Player.sinState.slothCount !== 'number') Player.sinState.slothCount = 0;
+        if (typeof Player.sinState.wrathRevive !== 'number') Player.sinState.wrathRevive = 0;
+        if (!Player.achievements || typeof Player.achievements.has !== 'function') {
+            Player.achievements = new Set(Array.isArray(Player.achievements) ? Player.achievements : []);
+        }
+        if (!Player.history) Player.history = { items: new Set() };
+        if (!Player.history.items || typeof Player.history.items.has !== 'function') {
+            Player.history.items = new Set(Array.isArray(Player.history.items) ? Player.history.items : []);
+        }
+        if (!Player.maxHp || Player.maxHp <= 0) Player.maxHp = 100;
+        if (!Player.hp || Player.hp <= 0) Player.hp = Player.maxHp;
+        if (typeof Player.depth !== 'number') Player.depth = 0;
+        if (typeof Player.inInferno === 'undefined') Player.inInferno = false;
+    }
+
+    function directEnterNextFloor() {
+        ensurePlayableStructures();
+        if (!Player.class) {
+            const modal = document.getElementById('class-modal');
+            if (modal) modal.style.display = 'flex';
+            if (Game.renderEvent) Game.renderEvent('準備冒險', '請先選擇職業。', '選完職業後即可開始冒險。', '🎲');
+            return;
+        }
+
+        GameState.phase = 'event_end';
+        GameState.currentEnemy = null;
+        GameState.combatTurn = 0;
+        GameState.enemyDominated = false;
+
+        if (Player.equipment.accessories.some(a => a && a.id === 'acc_chaos')) {
+            Player.chaosRoll = (Math.random() * 2.5 + 0.5).toFixed(2);
+        } else {
+            Player.chaosRoll = 1;
+        }
+        if (Player.equipment.accessories.some(a => a && a.id === 'acc_transcendence')) {
+            Player.transcendenceRoll = (Math.random() * 4.0 + 1.0).toFixed(2);
+        } else {
+            Player.transcendenceRoll = 1;
+        }
+        if (Player.sinState && Player.sinState.lustActive) {
+            const drain = Math.floor(Player.maxHp * 0.10);
+            Player.hp = Math.max(1, Player.hp - drain);
+            if (Game.showFloatingText) Game.showFloatingText(`媚氣 -${drain} HP`, '#ff00ff');
+        }
+
+        Player.depth++;
+        try { if (Game.checkAchievements) Game.checkAchievements(); } catch (e) { console.warn(e); }
+        try { if (Game.checkSinCollection) Game.checkSinCollection(); } catch (e) { console.warn(e); }
+
+        try {
+            const hasBibleInBag = Player.inventory.material.some(i => i && i.name === '煉獄聖經');
+            if (!Player.inInferno && hasBibleInBag && Game.triggerInfernoGate) {
+                Game.triggerInfernoGate();
+            } else if (Player.inInferno && Game.processInfernoEvent) {
+                Game.processInfernoEvent();
+            } else if (Game.processNormalEvent) {
+                Game.processNormalEvent();
+            } else if (Game.renderEvent) {
+                Game.renderEvent('第 ' + Player.depth + ' 層', '你踏入新的冒險。', '系統已修復開始冒險按鈕。', '✨');
+            }
+        } catch (e) {
+            console.error('directEnterNextFloor failed:', e);
+            if (Game.renderEvent) Game.renderEvent('第 ' + Player.depth + ' 層', '你踏入新的冒險。', '若畫面停住，請按「繼續」。', '✨');
+            if (Game.setButtons) Game.setButtons('繼續', 'nextEvent', '無', null, true);
+        }
+        try { if (Game.updateUI) Game.updateUI(); } catch (e) {}
+        try { if (Game.saveGame) Game.saveGame(); } catch (e) {}
+    }
+
+    const previousNextEvent = Game.nextEvent ? Game.nextEvent.bind(Game) : null;
+    Game.forceStartAdventure = directEnterNextFloor;
+    Game.nextEvent = function () {
+        ensurePlayableStructures();
+        if (!Player.class) {
+            const modal = document.getElementById('class-modal');
+            if (modal) modal.style.display = 'flex';
+            if (Game.renderEvent) Game.renderEvent('準備冒險', '請先選擇職業。', '選完職業後即可開始冒險。', '🎲');
+            return;
+        }
+        const beforeDepth = Player.depth;
+        const beforeTitle = (document.getElementById('event-title') || {}).innerText || '';
+        try {
+            if (previousNextEvent) previousNextEvent();
+        } catch (e) {
+            console.error('nextEvent failed, using direct fallback:', e);
+            return directEnterNextFloor();
+        }
+        const afterTitle = (document.getElementById('event-title') || {}).innerText || '';
+        if (Player.depth === beforeDepth && /準備冒險|準備就緒/.test(beforeTitle + afterTitle)) {
+            return directEnterNextFloor();
+        }
+    };
+
+    const previousSetButtons = Game.setButtons ? Game.setButtons.bind(Game) : null;
+    if (previousSetButtons) {
+        Game.setButtons = function (mainText, mainAction, subText, subAction, disableSub) {
+            previousSetButtons(mainText, mainAction, subText, subAction, disableSub);
+            if (String(mainText).includes('開始冒險')) {
+                const btn = document.getElementById('btn-main');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.onclick = function (ev) {
+                        if (ev) ev.preventDefault();
+                        Game.forceStartAdventure();
+                    };
+                }
+            }
+        };
+    }
+
+    document.addEventListener('click', function (ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('#btn-main') : null;
+        if (!btn) return;
+        if (String(btn.innerText || '').includes('開始冒險')) {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            Game.forceStartAdventure();
+        }
+    }, true);
+})();
+
 Game.init();
 </script>
 
