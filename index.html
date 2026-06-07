@@ -901,13 +901,10 @@ pointer-events: none;
     </div>
 </div>
 
-<div class="section-title">☁️ Firebase 雲端同步狀態</div>
-<div id="cloud-status-panel" style="background:#17212f;border:1px solid rgba(76,175,80,0.35);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
-    <div>
-        <div id="cloud-status-text" style="font-weight:bold;color:#81c784;">已設定 Firebase，等待測試寫入...</div>
-        <div style="font-size:0.82em;color:#a8b3c7;margin-top:4px;">資料庫：game-4bc42-default-rtdb / 路徑：accounts、saves、cloudTest</div>
-    </div>
-    <button onclick="CloudDB.testWrite()" style="background:#2e7d32;color:white;padding:8px 12px;">測試寫入 Firebase</button>
+<!-- Firebase 雲端同步狀態已隱藏：雲端帳號、存檔、成績仍會在背景同步 -->
+<div id="cloud-status-panel" style="display:none;">
+    <div id="cloud-status-text">Firebase 雲端同步已啟用</div>
+    <button onclick="CloudDB.testWrite()">測試寫入 Firebase</button>
 </div>
 
 
